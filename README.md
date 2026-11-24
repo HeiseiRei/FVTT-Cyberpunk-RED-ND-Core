@@ -2,7 +2,7 @@
 
 [![Foundry VTT](https://img.shields.io/badge/Foundry%20VTT-v14-orange.svg)](https://foundryvtt.com/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![GitHub Release](https://img.shields.io/github/v/release/HeiseiRei/FVTT-Cyberpunk-RED---next?color=green)](https://github.com/HeiseiRei/FVTT-Cyberpunk-RED---next/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/HeiseiRei/FVTT-Cyberpunk-RED-ND-Core?color=green)](https://github.com/HeiseiRei/FVTT-Cyberpunk-RED-ND-Core/releases)
 
 A community-maintained continuation and modernization of the **Cyberpunk RED** system, built specifically for **Foundry VTT v14**.
 
@@ -17,7 +17,7 @@ This game system is unofficial fan content provided under the **Homebrew Content
 
 This project aims to keep Cyberpunk RED alive and thriving on modern Foundry versions. It brings full compatibility with **Foundry VTT v14**, integrated community bug fixes, UI/UX polish, and system optimizations.
 
-This is an ongoing development effort. While we aim for a smooth and stable experience, edge cases and bugs may occur. If you run into issues or have ideas for improvements, please [open an issue on GitHub](https://github.com/HeiseiRei/FVTT-Cyberpunk-RED---next/issues) — community feedback is always welcome!
+This is an ongoing development effort. While we aim for a smooth and stable experience, edge cases and bugs may occur. If you run into issues or have ideas for improvements, please [open an issue on GitHub](https://github.com/HeiseiRei/FVTT-Cyberpunk-RED-ND-Core/issues) — community feedback is always welcome!
 
 ---
 
@@ -30,7 +30,7 @@ The easiest way to install the system is via the Foundry VTT Game System manager
 3. Paste the following **Manifest URL** into the field at the bottom:
 
 ```text
-https://github.com/HeiseiRei/FVTT-Cyberpunk-RED---next/releases/latest/download/system.json
+https://github.com/HeiseiRei/FVTT-Cyberpunk-RED-ND-Core/releases/latest/download/system.json
 ```
 
 4. Click **Install**. Foundry will download the system and use this manifest to automatically notify you of future updates.

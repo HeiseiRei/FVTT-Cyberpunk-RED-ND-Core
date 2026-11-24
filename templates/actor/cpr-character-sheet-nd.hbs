@@ -311,36 +311,84 @@
 
   <section class="tab cpr-nd-dossier" data-group="primary" data-tab="dossier" aria-label="{{localize "CPR.characterSheetND.dossier.dossierTab"}}">
     <header class="cpr-nd-dossier-header">
-      <h2>{{localize "CPR.characterSheetND.dossier.archiveTitle"}}</h2>
+      <h2>{{localize "CPR.characterSheetND.dossier.feedTitle"}}</h2>
       <div class="cpr-nd-pin-counter" data-cpr-nd-pin-counter aria-live="polite">
         {{localize "CPR.characterSheetND.dossier.pinCounter"}}: <strong>{{pinnedLifepath.length}} / 3</strong>
       </div>
     </header>
     <div class="cpr-nd-dossier-grid">
       <div class="cpr-nd-dossier-archive">
-        {{#each lifePathModules as |module|}}
-          <section class="cpr-nd-dossier-file cpr-nd-dossier-file-{{module.id}}">
-            <h3>{{module.label}}</h3>
-            <div class="cpr-nd-dossier-fields">
-              {{#each module.fields as |field|}}
-                <article class="cpr-nd-dossier-field{{#if (cprCompare field.id "===" "familyCrisis")}} is-crisis{{/if}}">
-                  <div class="cpr-nd-dossier-field-heading">
-                    <h4>{{field.label}}</h4>
-                    <button type="button" class="cpr-nd-lifepath-pin{{#if field.isPinned}} is-pinned{{/if}}"
-                      data-cpr-nd-action="pin-lifepath" data-lifepath-id="{{field.id}}"
-                      aria-label="{{#if field.isPinned}}{{localize "CPR.characterSheetND.dossier.unpin"}}{{else}}{{localize "CPR.characterSheetND.dossier.pin"}}{{/if}}: {{field.label}}"
-                      data-tooltip="{{#if field.isPinned}}{{localize "CPR.characterSheetND.dossier.unpin"}}{{else}}{{localize "CPR.characterSheetND.dossier.pin"}}{{/if}}"
-                      aria-pressed="{{field.isPinned}}" {{#unless ../../isEditable}}disabled{{/unless}}>
-                      <i class="fa-solid fa-thumbtack" aria-hidden="true"></i>
-                    </button>
-                  </div>
-                  <p>{{#if field.value}}{{field.value}}{{else}}—{{/if}}</p>
-                </article>
-              {{/each}}
-            </div>
-          </section>
+        {{#if isEditable}}
+          <div class="cpr-nd-network-feed-toolbar">
+            <button type="button" class="cpr-nd-network-add" data-cpr-nd-action="add-network-block">
+              <i class="fa-solid fa-plus" aria-hidden="true"></i>
+              {{localize "CPR.characterSheetND.dossier.addBlock"}}
+            </button>
+          </div>
+        {{/if}}
+        <div class="cpr-nd-network-feed">
+          {{#each lifePathFields as |field|}}
+            <article class="cpr-nd-network-card cpr-nd-network-card-lifepath{{#if (cprCompare field.id "===" "familyCrisis")}} is-crisis{{/if}}"
+              data-cpr-nd-trace-type="lifepath" data-lifepath-id="{{field.id}}">
+              {{#if field.poster}}
+                <div class="cpr-nd-network-poster">
+                  <img src="{{field.poster}}" alt="">
+                </div>
+              {{/if}}
+              <div class="cpr-nd-network-card-body">
+                <div class="cpr-nd-network-card-meta">
+                  <span>{{field.header}}</span>
+                  <button type="button" class="cpr-nd-lifepath-pin{{#if field.isPinned}} is-pinned{{/if}}"
+                    data-cpr-nd-action="pin-lifepath" data-lifepath-id="{{field.id}}"
+                    aria-label="{{#if field.isPinned}}{{localize "CPR.characterSheetND.dossier.unpin"}}{{else}}{{localize "CPR.characterSheetND.dossier.pin"}}{{/if}}: {{field.label}}"
+                    aria-pressed="{{field.isPinned}}" {{#unless ../isEditable}}disabled{{/unless}}>
+                    <i class="fa-solid fa-thumbtack" aria-hidden="true"></i>
+                  </button>
+                </div>
+                <h3>{{field.label}}</h3>
+                <p>{{#if field.value}}{{field.value}}{{else}}{{localize "CPR.characterSheetND.dossier.emptyRecord"}}{{/if}}</p>
+              </div>
+            </article>
+          {{/each}}
+          {{#each customNetworkBlocks as |block|}}
+            <article class="cpr-nd-network-card cpr-nd-network-card-custom"
+              data-cpr-nd-trace-type="custom" data-network-block-id="{{block.id}}">
+              {{#if block.poster}}
+                <div class="cpr-nd-network-poster">
+                  <img src="{{block.poster}}" alt="">
+                </div>
+              {{/if}}
+              <div class="cpr-nd-network-card-body">
+                <div class="cpr-nd-network-card-meta">
+                  <span>{{block.header}}</span>
+                </div>
+                <h3>{{block.title}}</h3>
+                <p>{{#if block.text}}{{block.text}}{{else}}{{localize "CPR.characterSheetND.dossier.emptyRecord"}}{{/if}}</p>
+              </div>
+            </article>
         {{/each}}
+        </div>
       </div>
+      {{#if isEditable}}
+        <div class="cpr-nd-network-context-menu" data-cpr-nd-network-context-menu role="menu"
+          aria-label="{{localize "CPR.characterSheetND.dossier.traceMenuLabel"}}" hidden>
+          <button type="button" role="menuitem" data-cpr-nd-action="trace-change-text">
+            {{localize "CPR.characterSheetND.dossier.traceChangeText"}}
+          </button>
+          <button type="button" role="menuitem" data-cpr-nd-action="trace-change-header">
+            {{localize "CPR.characterSheetND.dossier.traceChangeHeader"}}
+          </button>
+          <button type="button" role="menuitem" data-cpr-nd-action="trace-change-poster">
+            {{localize "CPR.characterSheetND.dossier.traceChangePoster"}}
+          </button>
+          <button type="button" role="menuitem" data-cpr-nd-action="trace-remove-poster" data-cpr-nd-menu-remove-poster>
+            {{localize "CPR.characterSheetND.dossier.traceRemovePoster"}}
+          </button>
+          <button type="button" role="menuitem" class="is-danger" data-cpr-nd-action="trace-delete">
+            {{localize "CPR.characterSheetND.dossier.traceDelete"}}
+          </button>
+        </div>
+      {{/if}}
       <aside class="cpr-nd-dossier-subject">
         <div class="cpr-nd-subject-frame">
           <div class="cpr-nd-subject-ruler" aria-label="{{localize "CPR.characterSheetND.dossier.heightRuler"}}">
@@ -351,7 +399,19 @@
           <span class="cpr-nd-subject-corner top-right"></span>
           <span class="cpr-nd-subject-corner bottom-left"></span>
           <span class="cpr-nd-subject-corner bottom-right"></span>
-          <img src="{{actor.img}}" alt="{{actor.name}}">
+          <img src="{{dossierPortrait}}" alt="{{actor.name}}">
+          {{#if isEditable}}
+            <div class="cpr-nd-subject-art-actions">
+              <button type="button" data-cpr-nd-action="dossier-portrait" data-tooltip="{{localize "CPR.characterSheetND.dossier.changeDossierPortrait"}}" aria-label="{{localize "CPR.characterSheetND.dossier.changeDossierPortrait"}}">
+                <i class="fa-solid fa-image" aria-hidden="true"></i>
+              </button>
+              {{#if dossierPortraitIsCustom}}
+                <button type="button" data-cpr-nd-action="reset-dossier-portrait" data-tooltip="{{localize "CPR.characterSheetND.dossier.resetDossierPortrait"}}" aria-label="{{localize "CPR.characterSheetND.dossier.resetDossierPortrait"}}">
+                  <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
+                </button>
+              {{/if}}
+            </div>
+          {{/if}}
         </div>
         <section class="cpr-nd-subject-id">
           <div class="cpr-nd-subject-hazard" aria-hidden="true"></div>

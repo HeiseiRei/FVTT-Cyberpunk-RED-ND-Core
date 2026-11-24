@@ -74,6 +74,10 @@ const WOUND_TEMPLATE = "systems/cyberpunk-red-core/templates/actor/cpr-character
 const LEGACY_WEAPON_ORDER_SCOPE = "cpr-sheet-themes";
 const INVENTORY_TYPES = Object.keys(CPR.inventoryCategories);
 const LOADOUT_TYPES = new Set(["weapon", "armor", "drug"]);
+const LIFEPATH_POSTERS_FLAG = "lifepathPosters";
+const LIFEPATH_TRACE_HEADERS_FLAG = "lifepathTraceHeaders";
+const CUSTOM_NETWORK_BLOCKS_FLAG = "customNetworkBlocks";
+const DOSSIER_PORTRAIT_FLAG = "dossierPortrait";
 
 function getSkillView(skill, actor) {
   const rank = Number(skill.system.level) || 0;
@@ -130,6 +134,17 @@ export default class CPRCharacterActorSheetND extends CPRCharacterActorSheetV2 {
       initial: "dashboard",
     },
   };
+
+  async _preRender(context, options) {
+    if (this.element) {
+      const skills = this.element.querySelector(".cpr-nd-skill-groups");
+      this._ndSkillsUiState = {
+        isOpen: this.element.classList.contains("cpr-nd-skills-open"),
+        scrollTop: skills?.scrollTop ?? 0,
+      };
+    }
+    await super._preRender(context, options);
+  }
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
@@ -213,11 +228,22 @@ export default class CPRCharacterActorSheetND extends CPRCharacterActorSheetV2 {
       value: index + 1,
       filled: index + 1 <= empathyValue,
     }));
+    const lifepathPosters = actor.getFlag(game.system.id, LIFEPATH_POSTERS_FLAG);
+    const lifepathPosterMap = lifepathPosters && typeof lifepathPosters === "object"
+      ? lifepathPosters
+      : {};
+    const lifepathTraceHeaders = actor.getFlag(game.system.id, LIFEPATH_TRACE_HEADERS_FLAG);
+    const lifepathTraceHeaderMap = lifepathTraceHeaders && typeof lifepathTraceHeaders === "object"
+      ? lifepathTraceHeaders
+      : {};
     const lifePathFields = LIFEPATH_FIELDS.map(({ id, label, group }) => ({
       id,
       group,
       label: game.i18n.localize(label),
       value: plainText(actor.system.lifepath?.[id]),
+      header: typeof lifepathTraceHeaderMap[id] === "string" && lifepathTraceHeaderMap[id].trim()
+        ? lifepathTraceHeaderMap[id]
+        : group.toUpperCase(),
     }));
     const availableLifePathIds = new Set(lifePathFields.map(({ id }) => id));
     const lifePathLabels = new Map(lifePathFields.map(({ id, label }) => [id, label]));
@@ -239,8 +265,33 @@ export default class CPRCharacterActorSheetND extends CPRCharacterActorSheetV2 {
       label: game.i18n.localize(label),
       fields: lifePathFields
         .filter((field) => field.group === id)
-        .map((field) => ({ ...field, isPinned: pinnedLifePathIds.has(field.id) })),
+        .map((field) => ({
+          ...field,
+          isPinned: pinnedLifePathIds.has(field.id),
+          poster: typeof lifepathPosterMap[field.id] === "string"
+            ? lifepathPosterMap[field.id]
+            : "",
+        })),
     }));
+    const customNetworkBlocks = Array.isArray(
+      actor.getFlag(game.system.id, CUSTOM_NETWORK_BLOCKS_FLAG)
+    )
+      ? actor.getFlag(game.system.id, CUSTOM_NETWORK_BLOCKS_FLAG)
+        .filter((block) => (
+          block
+          && typeof block.id === "string"
+          && typeof block.title === "string"
+        ))
+        .map((block) => ({
+          id: block.id,
+          title: block.title,
+          text: typeof block.text === "string" ? block.text : "",
+          poster: typeof block.poster === "string" ? block.poster : "",
+          header: typeof block.header === "string" && block.header.trim()
+            ? block.header
+            : "CUSTOM // TRACE",
+        }))
+      : [];
     const pinnedLifepathSlots = [
       ...pinnedLifepath.map((pin) => ({ ...pin, isEmpty: false })),
       ...Array.from({ length: 3 - pinnedLifepath.length }, () => ({ isEmpty: true })),
@@ -325,6 +376,16 @@ export default class CPRCharacterActorSheetND extends CPRCharacterActorSheetV2 {
       inventorySearch: this._inventorySearch ?? "",
       role,
       lifePathModules,
+      lifePathFields: lifePathFields.map((field) => ({
+        ...field,
+        isPinned: pinnedLifePathIds.has(field.id),
+        poster: typeof lifepathPosterMap[field.id] === "string"
+          ? lifepathPosterMap[field.id]
+          : "",
+      })),
+      customNetworkBlocks,
+      dossierPortrait: actor.getFlag(game.system.id, DOSSIER_PORTRAIT_FLAG) || actor.img,
+      dossierPortraitIsCustom: Boolean(actor.getFlag(game.system.id, DOSSIER_PORTRAIT_FLAG)),
       pinnedLifepath,
       pinnedLifepathSlots,
       luckValue,
@@ -340,12 +401,31 @@ export default class CPRCharacterActorSheetND extends CPRCharacterActorSheetV2 {
   async _onRender(context, options) {
     await super._onRender(context, options);
     this.element.classList.toggle("cpr-nd-dossier-active", this.tabGroups.primary === "dossier");
+    for (const image of this.element.querySelectorAll(".cpr-nd-network-poster img")) {
+      const applyPosterRatio = () => {
+        if (!image.naturalWidth || !image.naturalHeight) return;
+        const ratio = Math.min(2.4, Math.max(0.8, image.naturalWidth / image.naturalHeight));
+        image.closest(".cpr-nd-network-poster").style.aspectRatio = String(ratio);
+      };
+      if (image.complete) applyPosterRatio();
+      else image.addEventListener("load", applyPosterRatio, { once: true });
+    }
     const surface = this.element.querySelector(".cpr-nd-surface");
     if (!surface) throw new Error("Unable to initialize the CPR ND controls.");
+    if (this._ndSkillsUiState) {
+      this.element.classList.toggle("cpr-nd-skills-open", this._ndSkillsUiState.isOpen);
+      const skills = surface.querySelector(".cpr-nd-skill-groups");
+      if (skills) skills.scrollTop = this._ndSkillsUiState.scrollTop;
+      this._ndSkillsUiState = undefined;
+    }
     if (this.element.classList.contains("cpr-nd-wounds-open")) this.#positionCriticalWoundsDrawer();
 
     surface.addEventListener("click", (event) => {
       const clickTarget = event.target instanceof Element ? event.target : null;
+      const traceMenu = surface.querySelector("[data-cpr-nd-network-context-menu]");
+      if (traceMenu && !clickTarget?.closest("[data-cpr-nd-network-context-menu]")) {
+        traceMenu.hidden = true;
+      }
       const primaryTab = clickTarget?.closest("[data-action='tab'][data-group='primary']");
       if (primaryTab) {
         this.element.classList.toggle("cpr-nd-dossier-active", primaryTab.dataset.tab === "dossier");
@@ -392,7 +472,47 @@ export default class CPRCharacterActorSheetND extends CPRCharacterActorSheetV2 {
       void this.#handleAction(target, event).catch((error) => this.#reportError("Could not complete the CPR sheet action.", error));
     });
 
+    surface.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      const traceMenu = surface.querySelector("[data-cpr-nd-network-context-menu]");
+      if (!traceMenu || traceMenu.hidden) return;
+      traceMenu.hidden = true;
+      event.preventDefault();
+    });
+
     surface.addEventListener("contextmenu", (event) => {
+      const traceCard = event.target instanceof Element
+        ? event.target.closest("[data-cpr-nd-trace-type]")
+        : null;
+      if (traceCard) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!this.isEditable) return;
+        const traceMenu = surface.querySelector("[data-cpr-nd-network-context-menu]");
+        if (!traceMenu) throw new Error("Unable to open the Lifepath trace menu.");
+        traceMenu.dataset.traceType = traceCard.dataset.cprNdTraceType;
+        traceMenu.dataset.lifepathId = traceCard.dataset.lifepathId ?? "";
+        traceMenu.dataset.networkBlockId = traceCard.dataset.networkBlockId ?? "";
+        const removePoster = traceMenu.querySelector("[data-cpr-nd-menu-remove-poster]");
+        if (removePoster) {
+          removePoster.hidden = !traceCard.querySelector(".cpr-nd-network-poster img");
+        }
+        traceMenu.hidden = false;
+        const bounds = this.element.querySelector(".cpr-nd-dossier").getBoundingClientRect();
+        const left = Math.min(
+          Math.max(8, event.clientX - bounds.left),
+          Math.max(8, bounds.width - traceMenu.offsetWidth - 8)
+        );
+        const top = Math.min(
+          Math.max(8, event.clientY - bounds.top),
+          Math.max(8, bounds.height - traceMenu.offsetHeight - 8)
+        );
+        traceMenu.style.left = `${left}px`;
+        traceMenu.style.top = `${top}px`;
+        traceMenu.querySelector("button")?.focus({ preventScroll: true });
+        return;
+      }
+
       const skillTarget = event.target instanceof Element
         ? event.target.closest(".cpr-nd-skill-row[data-item-id], [data-cpr-nd-quick-skill][data-item-id]")
         : null;
@@ -661,6 +781,145 @@ export default class CPRCharacterActorSheetND extends CPRCharacterActorSheetV2 {
     return true;
   }
 
+  #promptNetworkBlock(block = null) {
+    const title = block?.title ?? "";
+    const text = block?.text ?? "";
+    const content = `
+      <section class="cpr-nd-network-block-editor">
+        <label>
+          <span>${escapeHtml(game.i18n.localize("CPR.characterSheetND.dossier.blockTitle"))}</span>
+          <input type="text" name="title" value="${escapeHtml(title)}" maxlength="120">
+        </label>
+        <label>
+          <span>${escapeHtml(game.i18n.localize("CPR.characterSheetND.dossier.blockText"))}</span>
+          <textarea name="text" rows="8">${escapeHtml(text)}</textarea>
+        </label>
+      </section>`;
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
+      new foundry.applications.api.DialogV2({
+        window: {
+          title: game.i18n.localize(
+            block
+              ? "CPR.characterSheetND.dossier.editBlock"
+              : "CPR.characterSheetND.dossier.addBlock"
+          ),
+        },
+        classes: ["cpr-nd-network-block-dialog", "cpr-nd-dialog"],
+        content,
+        buttons: [
+          {
+            action: "save",
+            label: game.i18n.localize("CPR.characterSheetND.dossier.saveBlock"),
+            default: true,
+            callback: (event, button) => finish({
+              title: button.form?.elements.title?.value?.trim() ?? "",
+              text: button.form?.elements.text?.value?.trim() ?? "",
+            }),
+          },
+          {
+            action: "cancel",
+            label: game.i18n.localize("CPR.characterSheetND.dossier.cancelBlock"),
+            callback: () => finish(null),
+          },
+        ],
+        close: () => {
+          finish(null);
+        },
+      }).render(true);
+    });
+  }
+
+  #promptTraceValue({ titleKey, labelKey, value, multiline = false }) {
+    const label = escapeHtml(game.i18n.localize(labelKey));
+    const input = multiline
+      ? `<textarea name="value" rows="8">${escapeHtml(value)}</textarea>`
+      : `<input type="text" name="value" value="${escapeHtml(value)}" maxlength="80">`;
+    const content = `
+      <section class="cpr-nd-network-block-editor">
+        <label>
+          <span>${label}</span>
+          ${input}
+        </label>
+      </section>`;
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      };
+      new foundry.applications.api.DialogV2({
+        window: { title: game.i18n.localize(titleKey) },
+        classes: ["cpr-nd-network-block-dialog", "cpr-nd-dialog"],
+        content,
+        buttons: [
+          {
+            action: "save",
+            label: game.i18n.localize("CPR.characterSheetND.dossier.saveBlock"),
+            default: true,
+            callback: (event, button) => {
+              const result = button.form?.elements.value?.value ?? "";
+              finish(multiline ? result : result.trim());
+            },
+          },
+          {
+            action: "cancel",
+            label: game.i18n.localize("CPR.characterSheetND.dossier.cancelBlock"),
+            callback: () => finish(null),
+          },
+        ],
+        close: () => finish(null),
+      }).render(true);
+    });
+  }
+
+  #pickLifepathPoster(lifepathId) {
+    if (!this.isEditable || !LIFEPATH_FIELDS.some(({ id }) => id === lifepathId)) return;
+    const storedPosters = this.document.getFlag(game.system.id, LIFEPATH_POSTERS_FLAG);
+    const posters = storedPosters && typeof storedPosters === "object"
+      ? foundry.utils.deepClone(storedPosters)
+      : {};
+    new foundry.applications.apps.FilePicker.implementation({
+      type: "image",
+      current: posters[lifepathId] ?? "",
+      callback: async (path) => {
+        if (path) posters[lifepathId] = path;
+        else delete posters[lifepathId];
+        try {
+          await this.document.setFlag(game.system.id, LIFEPATH_POSTERS_FLAG, posters);
+        } catch (error) {
+          this.#reportError("Could not update the Lifepath trace poster.", error);
+        }
+      },
+    }).render(true);
+  }
+
+  #pickCustomTracePoster(blockId) {
+    if (!this.isEditable) return;
+    const storedBlocks = this.document.getFlag(game.system.id, CUSTOM_NETWORK_BLOCKS_FLAG);
+    const blocks = Array.isArray(storedBlocks) ? foundry.utils.deepClone(storedBlocks) : [];
+    const block = blocks.find((entry) => entry && entry.id === blockId);
+    if (!block) throw new Error(`Trace ${blockId} is no longer on this character.`);
+    new foundry.applications.apps.FilePicker.implementation({
+      type: "image",
+      current: block.poster ?? "",
+      callback: async (path) => {
+        block.poster = path ?? "";
+        try {
+          await this.document.setFlag(game.system.id, CUSTOM_NETWORK_BLOCKS_FLAG, blocks);
+        } catch (error) {
+          this.#reportError("Could not update the custom trace poster.", error);
+        }
+      },
+    }).render(true);
+  }
+
   #promptWeaponReplacement(weapon, replacementOptions) {
     const options = replacementOptions.map(({ weapons }) => weapons.map((item) => item.id));
     const choices = replacementOptions.map(({ weapons, handsFreed }, index) => {
@@ -768,10 +1027,172 @@ export default class CPRCharacterActorSheetND extends CPRCharacterActorSheetV2 {
     await this.render(false);
   }
 
+  async #handleTraceContextAction(target, action) {
+    if (!this.isEditable) return;
+    const menu = target.closest("[data-cpr-nd-network-context-menu]");
+    if (!menu) throw new Error("Trace action is not attached to its context menu.");
+    const traceType = menu.dataset.traceType;
+    const lifepathId = menu.dataset.lifepathId;
+    const blockId = menu.dataset.networkBlockId;
+    const lifepathField = LIFEPATH_FIELDS.find(({ id }) => id === lifepathId);
+    const storedBlocks = this.document.getFlag(game.system.id, CUSTOM_NETWORK_BLOCKS_FLAG);
+    const blocks = Array.isArray(storedBlocks) ? foundry.utils.deepClone(storedBlocks) : [];
+    const block = blocks.find((entry) => entry && entry.id === blockId);
+    if (traceType === "lifepath" && !lifepathField) {
+      throw new Error(`Unknown Lifepath trace ${lifepathId}.`);
+    }
+    if (traceType === "custom" && !block) {
+      throw new Error(`Trace ${blockId} is no longer on this character.`);
+    }
+    if (!["lifepath", "custom"].includes(traceType)) {
+      throw new Error(`Unknown trace type ${traceType}.`);
+    }
+
+    menu.hidden = true;
+    if (action === "trace-change-poster") {
+      if (traceType === "lifepath") this.#pickLifepathPoster(lifepathId);
+      else this.#pickCustomTracePoster(blockId);
+      return;
+    }
+    if (action === "trace-change-text") {
+      const currentText = traceType === "lifepath"
+        ? plainText(this.document.system.lifepath?.[lifepathId])
+        : block.text ?? "";
+      const text = await this.#promptTraceValue({
+        titleKey: "CPR.characterSheetND.dossier.traceChangeText",
+        labelKey: "CPR.characterSheetND.dossier.traceTextLabel",
+        value: currentText,
+        multiline: true,
+      });
+      if (text === null) return;
+      if (traceType === "lifepath") {
+        await this.document.update({ [`system.lifepath.${lifepathId}`]: text });
+      } else {
+        block.text = text;
+        await this.document.setFlag(game.system.id, CUSTOM_NETWORK_BLOCKS_FLAG, blocks);
+      }
+      return;
+    }
+    if (action === "trace-change-header") {
+      const currentHeader = traceType === "lifepath"
+        ? (
+          this.document.getFlag(game.system.id, LIFEPATH_TRACE_HEADERS_FLAG)?.[lifepathId]
+          ?? lifepathField.group.toUpperCase()
+        )
+        : block.header ?? "CUSTOM // TRACE";
+      const header = await this.#promptTraceValue({
+        titleKey: "CPR.characterSheetND.dossier.traceChangeHeader",
+        labelKey: "CPR.characterSheetND.dossier.traceHeaderLabel",
+        value: currentHeader,
+      });
+      if (header === null) return;
+      if (traceType === "lifepath") {
+        const storedHeaders = this.document.getFlag(game.system.id, LIFEPATH_TRACE_HEADERS_FLAG);
+        const headers = storedHeaders && typeof storedHeaders === "object" && !Array.isArray(storedHeaders)
+          ? foundry.utils.deepClone(storedHeaders)
+          : {};
+        if (header) headers[lifepathId] = header;
+        else delete headers[lifepathId];
+        if (Object.keys(headers).length) {
+          await this.document.setFlag(game.system.id, LIFEPATH_TRACE_HEADERS_FLAG, headers);
+        } else {
+          await this.document.unsetFlag(game.system.id, LIFEPATH_TRACE_HEADERS_FLAG);
+        }
+      } else {
+        block.header = header || "CUSTOM // TRACE";
+        await this.document.setFlag(game.system.id, CUSTOM_NETWORK_BLOCKS_FLAG, blocks);
+      }
+      return;
+    }
+    if (action === "trace-remove-poster") {
+      const archive = this.element.querySelector(".cpr-nd-dossier-archive");
+      const archiveScrollTop = archive?.scrollTop ?? 0;
+      if (traceType === "lifepath") {
+        const storedPosters = this.document.getFlag(game.system.id, LIFEPATH_POSTERS_FLAG);
+        const posters = storedPosters && typeof storedPosters === "object" && !Array.isArray(storedPosters)
+          ? foundry.utils.deepClone(storedPosters)
+          : {};
+        delete posters[lifepathId];
+        if (Object.keys(posters).length) {
+          await this.document.setFlag(game.system.id, LIFEPATH_POSTERS_FLAG, {
+            [lifepathId]: new foundry.data.operators.ForcedDeletion(),
+          });
+        } else {
+          await this.document.unsetFlag(game.system.id, LIFEPATH_POSTERS_FLAG);
+        }
+      } else {
+        block.poster = "";
+        await this.document.setFlag(game.system.id, CUSTOM_NETWORK_BLOCKS_FLAG, blocks);
+      }
+      await this.render(false);
+      const updatedArchive = this.element.querySelector(".cpr-nd-dossier-archive");
+      if (updatedArchive) updatedArchive.scrollTop = archiveScrollTop;
+      return;
+    }
+    if (action === "trace-delete") {
+      const title = traceType === "lifepath"
+        ? game.i18n.localize(lifepathField.label)
+        : block.title;
+      const isConfirmed = await foundry.applications.api.DialogV2.confirm({
+        window: { title: game.i18n.localize("CPR.characterSheetND.dossier.traceDelete") },
+        content: `<p>${escapeHtml(game.i18n.format(
+          traceType === "lifepath"
+            ? "CPR.characterSheetND.dossier.traceDeleteLifepathConfirm"
+            : "CPR.characterSheetND.dossier.traceDeleteCustomConfirm",
+          { title }
+        ))}</p>`,
+        yes: { label: game.i18n.localize("CPR.characterSheetND.dossier.traceDelete") },
+        no: { label: game.i18n.localize("CPR.characterSheetND.dossier.cancelBlock") },
+      });
+      if (!isConfirmed) return;
+      if (traceType === "custom") {
+        await this.document.setFlag(
+          game.system.id,
+          CUSTOM_NETWORK_BLOCKS_FLAG,
+          blocks.filter(({ id: storedId }) => storedId !== blockId)
+        );
+        return;
+      }
+      await this.document.update({ [`system.lifepath.${lifepathId}`]: "" });
+      const storedPosters = this.document.getFlag(game.system.id, LIFEPATH_POSTERS_FLAG);
+      if (storedPosters && typeof storedPosters === "object" && !Array.isArray(storedPosters)) {
+        const posters = foundry.utils.deepClone(storedPosters);
+        delete posters[lifepathId];
+        if (Object.keys(posters).length) {
+          await this.document.setFlag(game.system.id, LIFEPATH_POSTERS_FLAG, posters);
+        } else {
+          await this.document.unsetFlag(game.system.id, LIFEPATH_POSTERS_FLAG);
+        }
+      }
+      const storedHeaders = this.document.getFlag(game.system.id, LIFEPATH_TRACE_HEADERS_FLAG);
+      if (storedHeaders && typeof storedHeaders === "object" && !Array.isArray(storedHeaders)) {
+        const headers = foundry.utils.deepClone(storedHeaders);
+        delete headers[lifepathId];
+        if (Object.keys(headers).length) {
+          await this.document.setFlag(game.system.id, LIFEPATH_TRACE_HEADERS_FLAG, headers);
+        } else {
+          await this.document.unsetFlag(game.system.id, LIFEPATH_TRACE_HEADERS_FLAG);
+        }
+      }
+      const pins = this.document.getFlag(game.system.id, "pinnedLifepath");
+      if (Array.isArray(pins)) {
+        await this.document.setFlag(
+          game.system.id,
+          "pinnedLifepath",
+          pins.filter((pin) => pin?.id !== lifepathId)
+        );
+      }
+    }
+  }
+
   async #handleAction(target, event) {
     const action = target.dataset.cprNdAction;
     const id = target.dataset.itemId;
 
+    if (action?.startsWith("trace-")) {
+      await this.#handleTraceContextAction(target, action);
+      return;
+    }
     if (action === "inventory-filter") {
       this._inventoryFilter = target.dataset.filter ?? "all";
       this.#filterInventory();
@@ -924,6 +1345,94 @@ export default class CPRCharacterActorSheetND extends CPRCharacterActorSheetV2 {
       const skill = this.document.items.get(id);
       if (!skill) throw new Error(`Skill ${id} is no longer on this character.`);
       await skill.update({ "system.favorite": !skill.system.favorite });
+      return;
+    }
+    if (action === "dossier-portrait") {
+      if (!this.isEditable) return;
+      new foundry.applications.apps.FilePicker.implementation({
+        type: "image",
+        current: this.document.getFlag(game.system.id, DOSSIER_PORTRAIT_FLAG) ?? this.document.img,
+        callback: async (path) => {
+          if (!path) return;
+          await this.document.setFlag(game.system.id, DOSSIER_PORTRAIT_FLAG, path);
+        },
+      }).render(true);
+      return;
+    }
+    if (action === "reset-dossier-portrait") {
+      if (!this.isEditable) return;
+      await this.document.unsetFlag(game.system.id, DOSSIER_PORTRAIT_FLAG);
+      return;
+    }
+    if (action === "add-network-block") {
+      if (!this.isEditable) return;
+      const result = await this.#promptNetworkBlock();
+      if (!result?.title) return;
+      const blocks = Array.isArray(
+        this.document.getFlag(game.system.id, CUSTOM_NETWORK_BLOCKS_FLAG)
+      )
+        ? foundry.utils.deepClone(
+          this.document.getFlag(game.system.id, CUSTOM_NETWORK_BLOCKS_FLAG)
+        )
+        : [];
+      blocks.push({
+        id: foundry.utils.randomID(),
+        title: result.title,
+        text: result.text,
+        poster: "",
+        header: "CUSTOM // TRACE",
+      });
+      await this.document.setFlag(game.system.id, CUSTOM_NETWORK_BLOCKS_FLAG, blocks);
+      return;
+    }
+    if (action === "edit-network-block") {
+      if (!this.isEditable) return;
+      const blockId = target.dataset.networkBlockId;
+      const blocks = Array.isArray(
+        this.document.getFlag(game.system.id, CUSTOM_NETWORK_BLOCKS_FLAG)
+      )
+        ? foundry.utils.deepClone(
+          this.document.getFlag(game.system.id, CUSTOM_NETWORK_BLOCKS_FLAG)
+        )
+        : [];
+      const block = blocks.find(({ id: storedId }) => storedId === blockId);
+      if (!block) return;
+      const result = await this.#promptNetworkBlock(block);
+      if (!result) return;
+      if (!result.title) {
+        ui.notifications?.warn(game.i18n.localize("CPR.characterSheetND.dossier.blockTitleRequired"));
+        return;
+      }
+      block.title = result.title;
+      block.text = result.text;
+      await this.document.setFlag(game.system.id, CUSTOM_NETWORK_BLOCKS_FLAG, blocks);
+      return;
+    }
+    if (action === "delete-network-block") {
+      if (!this.isEditable) return;
+      const blockId = target.dataset.networkBlockId;
+      const blocks = Array.isArray(
+        this.document.getFlag(game.system.id, CUSTOM_NETWORK_BLOCKS_FLAG)
+      )
+        ? foundry.utils.deepClone(
+          this.document.getFlag(game.system.id, CUSTOM_NETWORK_BLOCKS_FLAG)
+        )
+        : [];
+      const block = blocks.find(({ id: storedId }) => storedId === blockId);
+      if (!block) return;
+      await foundry.applications.api.DialogV2.confirm({
+        window: { title: game.i18n.localize("CPR.characterSheetND.dossier.deleteBlock") },
+        content: `<p>${escapeHtml(game.i18n.format("CPR.characterSheetND.dossier.deleteConfirm", { title: block.title }))}</p>`,
+        yes: { label: game.i18n.localize("CPR.characterSheetND.dossier.deleteBlock") },
+        no: { label: game.i18n.localize("CPR.characterSheetND.dossier.cancelBlock") },
+      }).then(async (confirmed) => {
+        if (!confirmed) return;
+        await this.document.setFlag(
+          game.system.id,
+          CUSTOM_NETWORK_BLOCKS_FLAG,
+          blocks.filter(({ id: storedId }) => storedId !== blockId)
+        );
+      });
       return;
     }
     if (action === "pin-lifepath") {
